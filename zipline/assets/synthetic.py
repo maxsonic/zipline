@@ -218,7 +218,7 @@ def make_future_info(first_sid,
             'expiration_date': notice_date_func(month_begin),
             'multiplier': 500,
         })
-    return pd.DataFrame.from_records(contracts, index='sid').convert_objects()
+    return pd.DataFrame.from_records(contracts, index='sid')
 
 
 def make_commodity_future_info(first_sid,
