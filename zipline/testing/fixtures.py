@@ -3,7 +3,7 @@ from unittest import TestCase
 
 from contextlib2 import ExitStack
 from logbook import NullHandler, Logger
-from six import with_metaclass
+from six import with_metaclass, iteritems
 from toolz import flip
 import pandas as pd
 import responses
@@ -365,23 +365,44 @@ class WithAssetFinder(WithDefaultDateBounds):
 
 class WithTradingCalendar(object):
     """
-    ZiplineTestCase mixing providing cls.trading_calendar as a class-level
-    fixture.
+    ZiplineTestCase mixing providing cls.trading_calendar,
+    cls.all_trading_calendars, cls.trading_calendar_for_asset_type as a
+    class-level fixture.
 
     After ``init_class_fixtures`` has been called, `cls.trading_calendar` is
-    populated with a trading calendar.
+    populated with the 'master' trading calendar, `cls.all_trading_calendars`
+    is populated with the trading calendars keyed by name,
+    `cls.trading_calendar_for_asset_type` is populated with the trading
+    calendars keyed by the asset type which uses the respective calendar.
 
     Attributes
     ----------
-    TRADING_CALENDAR_STR : str
-        The identifier of the calendar to use.
+    TRADING_CALENDAR_STRS : iterable
+        iterable of identifiers of the calendars to use.
+    TRADING_CALENDAR_MASTER_STR : str
+        The trading calendar to assign to `trading_calendar`.
+    TRADING_CALENDAR_FOR_ASSET_TYPE : dict
+        A dictionay which maps asset type names to the calendar associated
+        with that asset type.
     """
-    TRADING_CALENDAR_STR = 'NYSE'
+    TRADING_CALENDAR_STRS = ('NYSE',)
+    TRADING_CALENDAR_MASTER_STR = 'NYSE'
+    TRADING_CALENDAR_FOR_ASSET_TYPE = {'equity': 'NYSE'}
 
     @classmethod
     def init_class_fixtures(cls):
         super(WithTradingCalendar, cls).init_class_fixtures()
-        cls.trading_calendar = get_calendar(cls.TRADING_CALENDAR_STR)
+        cls.all_trading_calendars = {
+            cal_str: get_calendar(cal_str)
+            for cal_str in cls.TRADING_CALENDAR_STRS
+        }
+        cls.trading_calendar = cls.all_trading_calendars[
+            cls.TRADING_CALENDAR_MASTER_STR]
+        cls.trading_calendar_for_asset_type = {
+            asset_type: cls.all_trading_calendars[cal_str]
+            for asset_type, cal_str in iteritems(
+                cls.TRADING_CALENDAR_FOR_ASSET_TYPE)
+        }
 
 
 class WithTradingEnvironment(WithAssetFinder, WithTradingCalendar):
@@ -491,14 +512,19 @@ class WithSimParams(WithTradingEnvironment):
         cls.sim_params = cls.make_simparams()
 
 
-class WithNYSETradingDays(WithTradingCalendar):
+class WithTradingSessions(WithTradingCalendar):
     """
-    ZiplineTestCase mixin providing cls.trading_days as a class-level fixture.
+    ZiplineTestCase mixin providing cls.trading_days, cls.all_trading_sessions
+    as a class-level fixture.
 
-    After init_class_fixtures has been called, `cls.trading_days` is populated
-    with a DatetimeIndex containing NYSE calendar trading days ranging from:
+    After init_class_fixtures has been called, `cls.all_trading_sessions`
+    is populated with a dictionary of calendar name to the DatetimeIndex
+    containing the calendar trading days ranging from:
 
     (DATA_MAX_DAY - (cls.TRADING_DAY_COUNT) -> DATA_MAX_DAY)
+
+    `cls.trading_days` is shortcut to trading sessions for
+    `TRADING_CALENDAR_MASTER_STR`
 
     Attributes
     ----------
@@ -514,13 +540,22 @@ class WithNYSETradingDays(WithTradingCalendar):
 
     @classmethod
     def init_class_fixtures(cls):
-        super(WithNYSETradingDays, cls).init_class_fixtures()
+        super(WithTradingSessions, cls).init_class_fixtures()
 
-        all_days = cls.trading_calendar.all_sessions
-        start_loc = all_days.get_loc(cls.DATA_MIN_DAY, 'bfill')
-        end_loc = all_days.get_loc(cls.DATA_MAX_DAY, 'ffill')
+        cls.all_trading_sessions = {}
 
-        cls.trading_days = all_days[start_loc:end_loc + 1]
+        for cal_str, trading_calendar in iteritems(cls.all_trading_calendars):
+            all_sessions = trading_calendar.all_sessions
+            start_loc = all_sessions.get_loc(cls.DATA_MIN_DAY, 'bfill')
+            end_loc = all_sessions.get_loc(cls.DATA_MAX_DAY, 'ffill')
+
+            cls.all_trading_sessions[cal_str] = all_sessions[
+                start_loc:end_loc + 1]
+        # For backwards compatibility, assign `trading_days` which is now
+        # more accurately described as 'NYSE trading session labels', since
+        # no tests yet assign this as a value other than 'NYSE'.
+        cls.trading_days = cls.all_trading_sessions[
+            cls.TRADING_CALENDAR_MASTER_STR]
 
 
 class WithTmpDir(object):
@@ -812,8 +847,9 @@ class WithEquityMinuteBarData(WithTradingEnvironment):
 
     @classmethod
     def make_equity_minute_bar_data(cls):
+        trading_calendar = cls.trading_calendar_for_asset_type['equity']
         return create_minute_bar_data(
-            cls.trading_calendar.minutes_for_sessions_in_range(
+            trading_calendar.minutes_for_sessions_in_range(
                 cls.equity_minute_bar_days[0],
                 cls.equity_minute_bar_days[-1],
             ),
@@ -823,20 +859,21 @@ class WithEquityMinuteBarData(WithTradingEnvironment):
     @classmethod
     def init_class_fixtures(cls):
         super(WithEquityMinuteBarData, cls).init_class_fixtures()
+        trading_calendar = cls.trading_calendar_for_asset_type['equity']
         if cls.EQUITY_MINUTE_BAR_USE_FULL_CALENDAR:
-            days = cls.trading_calendar.all_execution_days
+            days = trading_calendar.all_execution_days
         else:
-            first_session = cls.trading_calendar.minute_to_session_label(
+            first_session = trading_calendar.minute_to_session_label(
                 pd.Timestamp(cls.EQUITY_MINUTE_BAR_START_DATE)
             )
 
             if cls.EQUITY_MINUTE_BAR_LOOKBACK_DAYS > 0:
-                first_session = cls.trading_calendar.sessions_window(
+                first_session = trading_calendar.sessions_window(
                     first_session,
                     -1 * cls.EQUITY_MINUTE_BAR_LOOKBACK_DAYS
                 )[0]
 
-            days = cls.trading_calendar.sessions_in_range(
+            days = trading_calendar.sessions_in_range(
                 first_session,
                 cls.EQUITY_MINUTE_BAR_END_DATE
             )
@@ -998,7 +1035,7 @@ class WithAdjustmentReader(WithBcolzEquityDailyBarReader):
         cls.adjustment_reader = SQLiteAdjustmentReader(conn)
 
 
-class WithSeededRandomPipelineEngine(WithNYSETradingDays, WithAssetFinder):
+class WithSeededRandomPipelineEngine(WithTradingSessions, WithAssetFinder):
     """
     ZiplineTestCase mixin providing class-level fixtures for running pipelines
     against deterministically-generated random data.
