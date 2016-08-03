@@ -61,9 +61,13 @@ class TestDataPortal(WithDataPortal, ZiplineTestCase):
         self.assertTrue(pd.isnull(
             self.data_portal.get_last_traded_dt(
                 asset, self.minutes[0], 'minute')))
+
+        asset = self.asset_finder.retrieve_asset(1)
+        self.assertEqual(self.minutes[1],
+                         self.data_portal.get_last_traded_dt(
+                             asset, self.minutes[1], 'minute'))
         # asset cases:
         # equities, futures
-        pass
 
     def test_bar_count_for_simple_transforms(self):
         # July 2015
