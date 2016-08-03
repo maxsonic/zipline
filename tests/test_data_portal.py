@@ -12,19 +12,58 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from numpy import nan
+import pandas as pd
 from pandas.tslib import Timedelta
 
 from zipline.testing.fixtures import (
     ZiplineTestCase,
     WithDataPortal
 )
-import pandas as pd
 
-
-# Note: most of dataportal functionality is tested in various other places,
-# such as test_history.
 
 class TestDataPortal(WithDataPortal, ZiplineTestCase):
+
+    ASSET_FINDER_EQUITY_SIDS = (1,)
+    START_DATE = pd.Timestamp('2016-08-03')
+    END_DATE = pd.Timestamp('2016-08-03')
+
+    @classmethod
+    def init_class_fixtures(cls):
+        # TODO; Should this use calendar?
+        cls.minutes = pd.date_range('2016-08-03 9:31',
+                                    '2016-08-03 9:36',
+                                    freq='min',
+                                    tz='US/Eastern').tz_convert('UTC')
+        super(TestDataPortal, cls).init_class_fixtures()
+
+    @classmethod
+    def make_equity_minute_bar_data(cls):
+        yield 1, pd.DataFrame(
+            {
+                'open': [nan, 103.50, 102.50, 104.50, 101.50, nan],
+                'high': [nan, 103.90, 102.90, 104.90, 101.90, nan],
+                'low': [nan, 103.10, 102.10, 104.10, 101.10, nan],
+                'close': [nan, 103.30, 102.30, 104.30, 101.30, nan],
+                'volume': [0, 1003, 1002, 1004, 1001, 0]
+            },
+            index=cls.minutes,
+        )
+
+    def test_get_last_traded_dt(self):
+        # dt cases:
+        # dt == last traded.
+        # last traded is 1 before dt.
+        # last traded is two before dt.
+        # no last_traded
+        asset = self.asset_finder.retrieve_asset(1)
+        self.assertTrue(pd.isnull(
+            self.data_portal.get_last_traded_dt(
+                asset, self.minutes[0], 'minute')))
+        # asset cases:
+        # equities, futures
+        pass
 
     def test_bar_count_for_simple_transforms(self):
         # July 2015
