@@ -30,7 +30,7 @@ class TestDataPortal(WithDataPortal,
 
     ASSET_FINDER_EQUITY_SIDS = (1,)
     START_DATE = pd.Timestamp('2016-08-01')
-    END_DATE = pd.Timestamp('2016-08-03')
+    END_DATE = pd.Timestamp('2016-08-04')
 
     EQUITY_DAILY_BAR_SOURCE_FROM_MINUTE = True
 
@@ -69,9 +69,19 @@ class TestDataPortal(WithDataPortal,
             },
             index=dts[:6]
         ))
+        dts = cls.trading_calendar.minutes_for_session(cls.trading_days[3])
+        dfs.append(pd.DataFrame(
+            {
+                'open': full(len(dts), nan),
+                'high': full(len(dts), nan),
+                'low': full(len(dts), nan),
+                'close': full(len(dts), nan),
+                'volume': full(len(dts), 0),
+            },
+            index=dts))
         yield 1, pd.concat(dfs)
 
-    def test_get_last_traded_dt(self):
+    def test_get_last_traded_minute(self):
         # dt cases:
         # dt == last traded.
         # last traded is 1 before dt.
@@ -95,6 +105,26 @@ class TestDataPortal(WithDataPortal,
                              asset, dts[5], 'minute'))
         # asset cases:
         # equities, futures
+
+    def test_get_last_traded_dt_daily(self):
+        # dt cases:
+        # dt == last traded.
+        # last traded is 1 before dt.
+        # last traded is two before dt.
+        # no last_traded
+        asset = self.asset_finder.retrieve_asset(1)
+        self.assertTrue(pd.isnull(
+            self.data_portal.get_last_traded_dt(
+                asset, self.trading_days[0], 'daily')))
+
+        self.assertEqual(self.trading_days[1],
+                         self.data_portal.get_last_traded_dt(
+                             asset, self.trading_days[1], 'daily'))
+
+        # Last slot is null.
+        self.assertEqual(self.trading_days[2],
+                         self.data_portal.get_last_traded_dt(
+                             asset, self.trading_days[3], 'daily'))
 
     def test_bar_count_for_simple_transforms(self):
         # July 2015

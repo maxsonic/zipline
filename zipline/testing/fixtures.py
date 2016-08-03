@@ -614,12 +614,7 @@ class WithEquityDailyBarData(WithTradingEnvironment):
             'high': 'max',
             'low': 'min',
             'close': 'last',
-            # TODO: Change test data so that large minute volumes are not used,
-            # so that 'sum' can be used without going over the uint limit.
-            # When that data is changed, this function can and should be moved
-            # to the `data` module so that loaders and tests can use the same
-            # source from minute logic.
-            'volume': 'last'
+            'volume': 'sum'
         }
         mm = cls.trading_calendar.all_minutes
         m_opens = cls.trading_calendar.schedule.market_open
