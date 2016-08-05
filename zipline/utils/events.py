@@ -504,7 +504,10 @@ class NthTradingDayOfWeek(TradingDayOfWeekRule):
         if env.is_trading_day(prev):
             return prev.date()
         else:
-            return env.next_trading_day(prev).date()
+            if env.next_trading_day(prev) is not None:
+                return env.next_trading_day(prev).date()
+
+            return prev
 
     date_func = get_first_trading_day_of_week
 
@@ -522,7 +525,9 @@ class NDaysBeforeLastTradingDayOfWeek(TradingDayOfWeekRule):
         dt = env.next_trading_day(dt)
         # Traverse forward until we hit a week border, then jump back to the
         # previous trading day.
-        while dt.date().weekday() > prev.date().weekday():
+
+        
+        while dt is not None and dt.date().weekday() > prev.date().weekday():
             prev = dt
             dt = env.next_trading_day(dt)
 

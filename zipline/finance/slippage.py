@@ -16,6 +16,7 @@ from __future__ import division
 
 import abc
 import math
+import numpy as np
 from six import with_metaclass
 
 from zipline.finance.transaction import create_transaction
@@ -139,7 +140,7 @@ class VolumeShareSlippage(SlippageModel):
         # price impact accounts for the total volume of transactions
         # created against the current minute bar
         remaining_volume = max_volume - self.volume_for_bar
-        if remaining_volume < 1:
+        if remaining_volume < 1 or np.isnan(remaining_volume):
             # we can't fill any more transactions
             raise LiquidityExceeded()
 

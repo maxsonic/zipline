@@ -171,12 +171,12 @@ def to_ctable(raw_data, invalid_data_behavior):
         # we already have a ctable so do nothing
         return raw_data
 
-    winsorise_uint32(raw_data, invalid_data_behavior, 'volume', *OHLC)
+    #winsorise_uint32(raw_data, invalid_data_behavior, 'volume', *OHLC)
     processed = (raw_data[list(OHLC)] * 1000).astype('uint32')
     dates = raw_data.index.values.astype('datetime64[s]')
     check_uint32_safe(dates.max().view(np.int64), 'day')
     processed['day'] = dates.astype('uint32')
-    processed['volume'] = raw_data.volume.astype('uint32')
+    processed['volume'] = raw_data.volume.astype('int64')
     return ctable.fromdataframe(processed)
 
 
