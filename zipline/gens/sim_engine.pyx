@@ -53,9 +53,13 @@ cdef class MinuteSimulationClock:
         market_opens = self.market_opens
         market_closes = self.market_closes
 
-        return np.arange(market_opens[i],
-                         market_closes[i] + _nanos_in_minute,
-                         _nanos_in_minute)
+        return np.concatenate((np.arange(market_opens[i],
+                               market_opens[i] + 120 * _nanos_in_minute, 
+                               _nanos_in_minute),
+                               np.arange(market_opens[i] + 210 * _nanos_in_minute,
+                                         market_closes[i] + _nanos_in_minute,
+                                         _nanos_in_minute)
+                              ))
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
