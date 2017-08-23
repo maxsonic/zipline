@@ -51,10 +51,14 @@ class BcolzMinuteWriterColumnMismatch(Exception):
 def _calc_minute_index(market_opens, minutes_per_day):
     minutes = np.zeros(len(market_opens) * minutes_per_day,
                        dtype='datetime64[ns]')
-    deltas = np.arange(0, minutes_per_day, dtype='timedelta64[m]')
+    deltas = np.arange(0, minutes_per_day/2, dtype='timedelta64[m]')
     for i, market_open in enumerate(market_opens):
+        # Hack for China market time
         start = market_open.asm8
+        noon_start = market_open.asm8 + np.timedelta64(210, "m")
         minute_values = start + deltas
+        noon_minute_values = noon_start + deltas
+        minute_values = np.concatenate((minute_values, noon_minute_values))
         start_ix = minutes_per_day * i
         end_ix = start_ix + minutes_per_day
         minutes[start_ix:end_ix] = minute_values
@@ -290,7 +294,6 @@ class BcolzMinuteBarWriter(object):
         self._minutes_per_day = minutes_per_day
         self._expectedlen = expectedlen
         self._ohlc_ratio = ohlc_ratio
-
         self._minute_index = _calc_minute_index(
             self._market_opens, self._minutes_per_day)
 
@@ -426,24 +429,30 @@ class BcolzMinuteBarWriter(object):
 
         last_date = self.last_date_in_output_for_sid(sid)
 
-        tds = self._trading_days
 
+        tds = self._trading_days
         if date <= last_date or date < tds[0]:
             # No need to pad.
             return
-
-        if last_date == pd.NaT:
+        #  Bug fix
+        if pd.isnull(last_date) or last_date is pd.NaT:
             # If there is no data, determine how many days to add so that
             # desired days are written to the correct slots.
-            days_to_zerofill = tds[tds.slice_indexer(end=date)]
+
+            # For China Market Hack
+            pad_date = date + pd.Timedelta("1 days")
+            days_to_zerofill = tds[tds.slice_indexer(end=pad_date)]
         else:
+            # For China Market Hack
+            pad_date = date + pd.Timedelta("1 days")
             days_to_zerofill = tds[tds.slice_indexer(
                 start=last_date + tds.freq,
-                end=date)]
+                end=pad_date)]
 
         self._zerofill(table, len(days_to_zerofill))
 
-        new_last_date = self.last_date_in_output_for_sid(sid)
+        # For China Market Hack
+        new_last_date = self.last_date_in_output_for_sid(sid) - pd.Timedelta("9 hours") - pd.Timedelta("31 minutes")
         assert new_last_date == date, "new_last_date={0} != date={1}".format(
             new_last_date, date)
 
@@ -572,7 +581,6 @@ class BcolzMinuteBarWriter(object):
         tds = self._trading_days
         input_first_day = pd.Timestamp(dts[0].astype('datetime64[D]'),
                                        tz='UTC')
-
         last_date = self.last_date_in_output_for_sid(sid)
 
         day_before_input = input_first_day - tds.freq

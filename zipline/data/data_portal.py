@@ -46,15 +46,16 @@ from zipline.errors import (
 log = Logger('DataPortal')
 
 BASE_FIELDS = frozenset([
-    "open", "high", "low", "close", "volume", "price", "last_traded"
+    "open", "high", "low", "close", "volume", "price", "pre_close",
+    "last_traded", "is_st"
 ])
 
 OHLCV_FIELDS = frozenset([
-    "open", "high", "low", "close", "volume"
+    "open", "high", "low", "close", "pre_close", "volume", "is_st"
 ])
 
 OHLCVP_FIELDS = frozenset([
-    "open", "high", "low", "close", "volume", "price"
+    "open", "high", "low", "close", "volume", "pre_close", "price", "is_st"
 ])
 
 HISTORY_FREQUENCIES = set(["1m", "1d"])
@@ -994,6 +995,10 @@ class DataPortal(object):
                     return val
             except NoDataOnDate:
                 return np.nan
+        elif column == "is_st":
+                value = self._equity_daily_reader.spot_price(
+                    asset, dt, "close"
+                )
         elif column == "price":
             found_dt = dt
             while True:

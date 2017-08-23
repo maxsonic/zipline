@@ -30,6 +30,7 @@ from numpy import (
     array,
     int64,
     float64,
+    bool_,
     full,
     iinfo,
     integer,
@@ -70,9 +71,10 @@ from ._adjustments import load_adjustments_from_sqlite
 
 logger = logbook.Logger('UsEquityPricing')
 
-OHLC = frozenset(['open', 'high', 'low', 'close'])
+OHLC = frozenset(['open', 'high', 'low', 'close', 'pre_close'])
 US_EQUITY_PRICING_BCOLZ_COLUMNS = (
-    'open', 'high', 'low', 'close', 'volume', 'day', 'id'
+    'open', 'high', 'low', 'close', 'pre_close', 'is_st', 'volume', 'day',
+    'id'
 )
 SQLITE_ADJUSTMENT_COLUMN_DTYPES = {
     'effective_date': integer,
@@ -177,6 +179,7 @@ def to_ctable(raw_data, invalid_data_behavior):
     check_uint32_safe(dates.max().view(np.int64), 'day')
     processed['day'] = dates.astype('uint32')
     processed['volume'] = raw_data.volume.astype('int64')
+    processed['is_st'] = raw_data.is_st.astype('bool')
     return ctable.fromdataframe(processed)
 
 
@@ -201,7 +204,9 @@ class BcolzDailyBarWriter(object):
         'high': float64,
         'low': float64,
         'close': float64,
+        'pre_close': float64,
         'volume': float64,
+        'is_st': bool_
     }
 
     def __init__(self, filename, calendar):
@@ -682,7 +687,7 @@ class BcolzDailyBarReader(DailyBarReader):
         price = self._spot_col(colname)[ix]
         if price == 0:
             return -1
-        if colname != 'volume':
+        if colname != 'volume' and colname != 'is_st':
             return price * 0.001
         else:
             return price
