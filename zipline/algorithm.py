@@ -632,9 +632,7 @@ class TradingAlgorithm(object):
         # Create zipline and loop through simulated_trading.
         # Each iteration returns a perf dictionary
         try:
-            perfs = []
-            for perf in self.get_generator():
-                perfs.append(perf)
+            perfs = [perf for perf in self.get_generator()]
 
             # convert perf dict to pandas dataframe
             daily_stats = self._create_daily_stats(perfs)
@@ -1147,10 +1145,15 @@ class TradingAlgorithm(object):
             as_of_date=as_of_date
         )
 
-    def _calculate_order_value_amount(self, asset, value):
+    def _calculate_order_value_amount(self, asset, value, base_price=None,
+                                      open_price=None,
+                                      close_price=None,
+                                      when=None,
+                                      current_volume=None):
         """
         Calculates how many shares/contracts to order based on the type of
         asset being ordered.
+        The base_price is the price we calculate our amount for.
         """
         # Make sure the asset exists, and that there is a last price for it.
         # FIXME: we should use BarData's can_trade logic here, but I haven't
@@ -1168,8 +1171,12 @@ class TradingAlgorithm(object):
                     " {1}.".format(asset.symbol, asset.end_date)
             )
         else:
-            last_price = \
-                self.trading_client.current_data.current(asset, "price")
+            # Sonic: seems for days data
+            if base_price is not None:
+                last_price = base_price
+            else:
+                last_price = \
+                    self.trading_client.current_data.current(asset, "price")
 
             if np.isnan(last_price):
                 raise CannotOrderDelistedAsset(
@@ -1192,7 +1199,24 @@ class TradingAlgorithm(object):
         else:
             value_multiplier = 1
 
-        return value / (last_price * value_multiplier)
+        cps = 1
+        if hasattr(self.blotter.commission, "cost_per_dollar") and value > 0:
+            cps_ = self.blotter.commission.cost_per_dollar + self.blotter.commission.fee_rate
+            cps = 1 + cps_
+        base_price = (1 + self.blotter.slippage_func.ratio) * base_price
+        amount = value / (base_price * value_multiplier * cps)
+        if hasattr(self.blotter.commission, "calculate_by_amount_price") and \
+            hasattr(self.blotter.commission, "calculate_by_tax_fee") and \
+            value > 0:
+            amount = int(amount / 100) * 100
+            cost = self.blotter.commission.calculate_by_amount_price(amount,
+                                                                     base_price)
+            if cost < 5:
+                left_value = value - 5
+                cps = 1 + self.blotter.commission.fee_rate
+                amount = left_value / (base_price * value_multiplier * cps)
+
+        return amount
 
     def _can_order_asset(self, asset):
         if not isinstance(asset, Asset):
@@ -1224,7 +1248,12 @@ class TradingAlgorithm(object):
               amount,
               limit_price=None,
               stop_price=None,
-              style=None):
+              style=None,
+              base_price=None,
+              open_price=None,
+              close_price=None,
+              when=None,
+              current_volume=None):
         """Place an order.
 
         Parameters
@@ -1283,7 +1312,12 @@ class TradingAlgorithm(object):
         style = self.__convert_order_params_for_blotter(limit_price,
                                                         stop_price,
                                                         style)
-        return self.blotter.order(asset, amount, style)
+        return self.blotter.order(asset, amount, style,
+                                  base_price=base_price,
+                                  open_price=open_price,
+                                  close_price=close_price,
+                                  when=when,
+                                  current_volume=current_volume)
 
     def validate_order_params(self,
                               asset,
@@ -1348,7 +1382,12 @@ class TradingAlgorithm(object):
                     value,
                     limit_price=None,
                     stop_price=None,
-                    style=None):
+                    style=None,
+                    base_price=None,
+                    open_price=None,
+                    close_price=None,
+                    when=None,
+                    current_volume=None):
         """Place an order by desired value rather than desired number of
         shares.
 
@@ -1390,11 +1429,23 @@ class TradingAlgorithm(object):
         if not self._can_order_asset(asset):
             return None
 
-        amount = self._calculate_order_value_amount(asset, value)
+        amount = self._calculate_order_value_amount(asset, value,
+                                                    base_price=base_price,
+                                                    open_price=open_price,
+                                                    close_price=close_price,
+                                                    when=when,
+                                                    current_volume=current_volume)
+        if value > 0:
+            amount = int(amount / 100) * 100
         return self.order(asset, amount,
                           limit_price=limit_price,
                           stop_price=stop_price,
-                          style=style)
+                          style=style,
+                          base_price=base_price,
+                          open_price=open_price,
+                          close_price=close_price,
+                          when=when,
+                          current_volume=current_volume)
 
     @property
     def recorded_vars(self):
@@ -1577,7 +1628,12 @@ class TradingAlgorithm(object):
                       percent,
                       limit_price=None,
                       stop_price=None,
-                      style=None):
+                      style=None,
+                      open_price=None,
+                      base_price=None,
+                      close_price=None,
+                      when=None,
+                      current_volume=None):
         """Place an order in the specified asset corresponding to the given
         percent of the current portfolio value.
 
@@ -1618,7 +1674,13 @@ class TradingAlgorithm(object):
         return self.order_value(asset, value,
                                 limit_price=limit_price,
                                 stop_price=stop_price,
-                                style=style)
+                                style=style,
+                                base_price=base_price,
+                                close_price=close_price,
+                                open_price=open_price,
+                                when=when,
+                                current_volume=current_volume
+                                )
 
     @api_method
     @disallowed_in_before_trading_start(OrderInBeforeTradingStart())
@@ -1627,7 +1689,12 @@ class TradingAlgorithm(object):
                      target,
                      limit_price=None,
                      stop_price=None,
-                     style=None):
+                     style=None,
+                     open_price=None,
+                     base_price=None,
+                     close_price=None,
+                     when=None,
+                     current_volume=None):
         """Place an order to adjust a position to a target number of shares. If
         the position doesn't already exist, this is equivalent to placing a new
         order. If the position does exist, this is equivalent to placing an
@@ -1686,12 +1753,22 @@ class TradingAlgorithm(object):
             return self.order(asset, req_shares,
                               limit_price=limit_price,
                               stop_price=stop_price,
-                              style=style)
+                              style=style,
+                              base_price=base_price,
+                              open_price=open_price,
+                              close_price=close_price,
+                              when=when,
+                              current_volume=current_volume)
         else:
             return self.order(asset, target,
                               limit_price=limit_price,
                               stop_price=stop_price,
-                              style=style)
+                              style=style,
+                              base_price=base_price,
+                              open_price=open_price,
+                              close_price=close_price,
+                              when=when,
+                              current_volume=current_volume)
 
     @api_method
     @disallowed_in_before_trading_start(OrderInBeforeTradingStart())
@@ -1700,7 +1777,12 @@ class TradingAlgorithm(object):
                            target,
                            limit_price=None,
                            stop_price=None,
-                           style=None):
+                           style=None,
+                           base_price=None,
+                           open_price=None,
+                           close_price=None,
+                           when=None,
+                           current_volume=None):
         """Place an order to adjust a position to a target value. If
         the position doesn't already exist, this is equivalent to placing a new
         order. If the position does exist, this is equivalent to placing an
@@ -1721,6 +1803,9 @@ class TradingAlgorithm(object):
             The stop price for the order.
         style : ExecutionStyle
             The execution style for the order.
+        base_price: float, optional
+            The price that our calculation based on. Normally we use the open
+            price.
 
         Returns
         -------
@@ -1754,16 +1839,32 @@ class TradingAlgorithm(object):
         if not self._can_order_asset(asset):
             return None
 
-        target_amount = self._calculate_order_value_amount(asset, target)
+        target_amount = self._calculate_order_value_amount(asset, target,
+                                                           base_price=base_price,
+                                                           open_price=open_price,
+                                                           close_price=close_price,
+                                                           when=when,
+                                                           current_volume=current_volume)
+
+        if target > 0:
+            target_amount = int(target_amount / 100) * 100
+
         return self.order_target(asset, target_amount,
                                  limit_price=limit_price,
                                  stop_price=stop_price,
-                                 style=style)
+                                 style=style,
+                                 base_price=base_price,
+                                 open_price=open_price,
+                                 close_price=close_price,
+                                 when=when,
+                                 current_volume=current_volume)
 
     @api_method
     @disallowed_in_before_trading_start(OrderInBeforeTradingStart())
     def order_target_percent(self, asset, target,
-                             limit_price=None, stop_price=None, style=None):
+                             limit_price=None, stop_price=None, style=None,
+                             base_price=None, open_price=None,
+                             close_price=None, when=None, current_volume=None):
         """Place an order to adjust a position to a target percent of the
         current portfolio value. If the position doesn't already exist, this is
         equivalent to placing a new order. If the position does exist, this is
@@ -1821,7 +1922,12 @@ class TradingAlgorithm(object):
         return self.order_target_value(asset, target_value,
                                        limit_price=limit_price,
                                        stop_price=stop_price,
-                                       style=style)
+                                       style=style,
+                                       base_price=base_price,
+                                       open_price=open_price,
+                                       close_price=close_price,
+                                       when=None,
+                                       current_volume=current_volume)
 
     @error_keywords(sid='Keyword argument `sid` is no longer supported for '
                         'get_open_orders. Use `asset` instead.')

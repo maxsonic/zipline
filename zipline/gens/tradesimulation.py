@@ -105,29 +105,30 @@ class AlgorithmSimulator(object):
             if dt_to_use in algo.capital_changes:
                 process_minute_capital_changes(dt_to_use)
 
-            self.simulation_dt = dt_to_use
-            algo.on_dt_changed(dt_to_use)
-
             blotter = algo.blotter
             perf_tracker = algo.perf_tracker
 
-            # handle any transactions and commissions coming out new orders
-            # placed in the last bar
-            new_transactions, new_commissions, closed_orders = \
-                blotter.get_transactions(current_data)
+            if algo.perf_tracker.emission_rate == 'minute':
+                self.simulation_dt = dt_to_use
+                algo.on_dt_changed(dt_to_use)
 
-            blotter.prune_orders(closed_orders)
+                # handle any transactions and commissions coming out new orders
+                # placed in the last bar
+                new_transactions, new_commissions, closed_orders = \
+                    blotter.get_transactions(current_data)
 
-            for transaction in new_transactions:
-                perf_tracker.process_transaction(transaction)
+                blotter.prune_orders(closed_orders)
 
-                # since this order was modified, record it
-                order = blotter.orders[transaction.order_id]
-                perf_tracker.process_order(order)
+                for transaction in new_transactions:
+                    perf_tracker.process_transaction(transaction)
 
-            if new_commissions:
-                for commission in new_commissions:
-                    perf_tracker.process_commission(commission)
+                    # since this order was modified, record it
+                    order = blotter.orders[transaction.order_id]
+                    perf_tracker.process_order(order)
+
+                if new_commissions:
+                    for commission in new_commissions:
+                        perf_tracker.process_commission(commission)
 
             handle_data(algo, current_data, dt_to_use)
 
@@ -142,9 +143,37 @@ class AlgorithmSimulator(object):
                 for new_order in new_orders:
                     perf_tracker.process_order(new_order)
 
+            if algo.perf_tracker.emission_rate == 'daily':
+                self.simulation_dt = dt_to_use
+                algo.on_dt_changed(dt_to_use)
+
+                # handle any transactions and commissions coming out new orders
+                # placed in the last bar
+                new_transactions, new_commissions, closed_orders = \
+                    blotter.get_transactions(current_data)
+
+                blotter.prune_orders(closed_orders)
+
+                for transaction in new_transactions:
+                    perf_tracker.process_transaction(transaction)
+
+                    # since this order was modified, record it
+                    order = blotter.orders[transaction.order_id]
+                    perf_tracker.process_order(order)
+
+                if new_commissions:
+                    for commission in new_commissions:
+                        perf_tracker.process_commission(commission)
+
+                after_day(dt_to_use)
+
             self.algo.portfolio_needs_update = True
             self.algo.account_needs_update = True
             self.algo.performance_needs_update = True
+
+        def after_day(midnight_dt, current_data=self.current_data,
+                       data_portal=self.data_portal):
+            algo.after_trade(current_data)
 
         def once_a_day(midnight_dt, current_data=self.current_data,
                        data_portal=self.data_portal):
@@ -244,6 +273,7 @@ class AlgorithmSimulator(object):
                     execute_order_cancellation_policy()
 
                     yield self._get_daily_message(dt, algo, algo.perf_tracker)
+
                 elif action == MINUTE_END:
                     handle_benchmark(dt)
                     minute_msg = \

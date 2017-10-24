@@ -74,7 +74,9 @@ class Blotter(object):
     def set_date(self, dt):
         self.current_dt = dt
 
-    def order(self, sid, amount, style, order_id=None):
+    def order(self, sid, amount, style, order_id=None,
+              base_price=None, open_price=None, close_price=None,
+              when=None, current_volume=None):
 
         # something could be done with amount to further divide
         # between buy by share count OR buy shares up to a dollar amount
@@ -105,7 +107,12 @@ class Blotter(object):
             amount=amount,
             stop=style.get_stop_price(is_buy),
             limit=style.get_limit_price(is_buy),
-            id=order_id
+            id=order_id,
+            base_price=base_price,
+            close_price=close_price,
+            open_price=open_price,
+            when=when,
+            current_volume=current_volume
         )
 
         self.open_orders[order.sid].append(order)

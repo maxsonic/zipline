@@ -43,10 +43,13 @@ class Order(object):
     # to cut down on the memory footprint of this object.
     __slots__ = ["id", "dt", "reason", "created", "sid", "amount", "filled",
                  "commission", "_status", "stop", "limit", "stop_reached",
-                 "limit_reached", "direction", "type", "broker_order_id"]
+                 "limit_reached", "direction", "type", "broker_order_id",
+                 "base_price", "close_price", "open_price", "when",
+                 "current_volume"]
 
     def __init__(self, dt, sid, amount, stop=None, limit=None, filled=0,
-                 commission=0, id=None):
+                 commission=0, id=None, base_price=None, close_price=None,
+                 open_price=None, when=None, current_volume=None):
         """
         @dt - datetime.datetime that the order was placed
         @sid - asset for the order.  called sid for historical reasons.
@@ -74,6 +77,11 @@ class Order(object):
         self.direction = math.copysign(1, self.amount)
         self.type = zp.DATASOURCE_TYPE.ORDER
         self.broker_order_id = None
+        self.base_price = base_price
+        self.open_price = open_price
+        self.close_price = close_price
+        self.when = when
+        self.current_volume = current_volume
 
     def make_id(self):
         return uuid.uuid4().hex
@@ -170,7 +178,7 @@ class Order(object):
         return (stop_reached, limit_reached, sl_stop_reached)
 
     def handle_split(self, ratio):
-        # update the amount, limit_price, and stop_price
+        # update the amountche, limit_price, and stop_price
         # by the split's ratio
 
         # info here: http://finra.complinet.com/en/display/display_plain.html?
@@ -253,3 +261,4 @@ class Order(object):
         Unicode representation for this object.
         """
         return text_type(repr(self))
+        # update the amount, limit_price, and stop_price
