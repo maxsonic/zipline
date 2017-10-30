@@ -376,9 +376,16 @@ class PositionTracker(object):
                 last_sale_price = data_portal.get_spot_value(
                     asset, 'price', dt, self.data_frequency
                 )
-
+                
                 if not np.isnan(last_sale_price):
                     position.last_sale_price = last_sale_price
+                else:
+                    last_sale_price = data_portal.get_spot_value(
+                        asset, 'pre_close', dt, self.data_frequency
+                    )
+
+                    if not np.isnan(last_sale_price):
+                        position.last_sale_price = last_sale_price
         else:
             for asset, position in iteritems(self.positions):
                 last_sale_price = data_portal.get_adjusted_value(

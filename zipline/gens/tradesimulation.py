@@ -177,7 +177,6 @@ class AlgorithmSimulator(object):
 
         def once_a_day(midnight_dt, current_data=self.current_data,
                        data_portal=self.data_portal):
-
             perf_tracker = algo.perf_tracker
 
             if midnight_dt in algo.capital_changes:

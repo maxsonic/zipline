@@ -1011,6 +1011,19 @@ class DataPortal(object):
                             return value
                         else:
                             # adjust if needed
+
+                            dividend_adjustments = self._get_adjustment_list(
+                                asset, self._dividends_dict, "DIVIDENDS",
+                            )
+                            for adj_dt, adj in dividend_adjustments:
+                                if found_dt <= dt and adj_dt <= dt:
+
+                                    value = self._equity_daily_reader.spot_price(
+                                        asset, found_dt, "pre_close"
+                                    )
+                                    if value != -1:
+                                        return value
+
                             return self.get_adjusted_value(
                                 asset, column, found_dt, dt, "minute",
                                 spot_value=value
